@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meal Planner</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ===== HEADER ===== -->
+  <header class="app-header">
+    <h1>Meal Planner</h1>
+    <p class="subtitle">Plan your week, simplify your grocery run.</p>
+  </header>
+
+  <!-- ===== NAV TABS ===== -->
+  <nav class="tabs" role="tablist">
+    <button class="tab active" data-tab="bank" role="tab" aria-selected="true">Meal Bank</button>
+    <button class="tab" data-tab="week" role="tab" aria-selected="false">This Week</button>
+    <button class="tab" data-tab="add" role="tab" aria-selected="false">Add Meal</button>
+  </nav>
+
+  <!-- ===== MAIN CONTENT ===== -->
+  <main>
+
+    <!-- — Meal Bank — -->
+    <section id="panel-bank" class="panel active">
+      <div class="panel-toolbar">
+        <input type="text" id="search-input" placeholder="Search meals..." aria-label="Search meals" />
+        <div class="filter-chips">
+          <button class="chip active" data-filter="all">All</button>
+          <button class="chip" data-filter="GF">GF</button>
+          <button class="chip" data-filter="DF">DF</button>
+        </div>
+      </div>
+      <div id="meal-list" class="meal-grid">
+        <!-- Cards injected by JS -->
+      </div>
+      <p id="bank-empty" class="empty-state hidden">No meals found. Add one!</p>
+      <div id="bank-loader" class="loader hidden"><span class="spinner"></span> Loading meals...</div>
+    </section>
+
+    <!-- — This Week — -->
+    <section id="panel-week" class="panel hidden">
+      <div id="week-list" class="meal-grid">
+        <!-- Selected meal cards -->
+      </div>
+      <p id="week-empty" class="empty-state">No meals selected yet. Go to the Meal Bank to pick some!</p>
+
+      <div id="grocery-section" class="hidden">
+        <h2>Grocery List</h2>
+        <ul id="grocery-list"></ul>
+        <button id="btn-copy" class="btn btn-primary">Copy to Clipboard</button>
+      </div>
+
+      <button id="btn-generate" class="btn btn-accent hidden">Generate Grocery List</button>
+      <button id="btn-clear-week" class="btn btn-outline hidden">Clear Week</button>
+    </section>
+
+    <!-- — Add Meal — -->
+    <section id="panel-add" class="panel hidden">
+      <form id="add-form" class="add-form" autocomplete="off">
+        <label for="input-name">Meal Name *</label>
+        <input type="text" id="input-name" required placeholder="e.g. Chicken Stir-Fry" />
+
+        <label for="input-ingredients">Ingredients * <small>(comma-separated)</small></label>
+        <textarea id="input-ingredients" rows="4" required placeholder="e.g. chicken breast, broccoli, soy sauce, rice"></textarea>
+
+        <label for="input-link">Recipe Link / Notes</label>
+        <input type="url" id="input-link" placeholder="https://..." />
+
+        <fieldset class="tag-fieldset">
+          <legend>Dietary Tags</legend>
+          <label class="tag-check"><input type="checkbox" value="GF" /> Gluten-Free</label>
+          <label class="tag-check"><input type="checkbox" value="DF" /> Dairy-Free</label>
+        </fieldset>
+
+        <button type="submit" class="btn btn-primary" id="btn-submit">Add Meal</button>
+        <p id="form-status" class="form-status hidden"></p>
+      </form>
+    </section>
+
+  </main>
+
+  <!-- ===== TOAST ===== -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>

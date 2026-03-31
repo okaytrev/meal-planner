@@ -201,6 +201,7 @@ main { padding: 1rem; max-width: 640px; margin: 0 auto; }
   background: var(--clr-primary-light);
   color: var(--clr-primary);
 }
+.card-actions { display: flex; gap: .35rem; align-items: center; }
 .btn-select:hover { background: #b7e4c7; }
 .btn-select.added {
   background: var(--clr-primary);
@@ -211,6 +212,22 @@ main { padding: 1rem; max-width: 640px; margin: 0 auto; }
   color: var(--clr-danger);
 }
 .btn-remove:hover { background: #fecaca; }
+.btn-delete {
+  border: none;
+  border-radius: 6px;
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 600;
+  padding: .3rem .5rem;
+  cursor: pointer;
+  background: transparent;
+  color: var(--clr-muted);
+  transition: color .15s, background .15s;
+}
+.btn-delete:hover {
+  background: #fee2e2;
+  color: var(--clr-danger);
+}
 
 /* ===== BUTTONS ===== */
 .btn {

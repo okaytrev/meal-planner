@@ -7,11 +7,9 @@ const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwVaqs8KNz_GVfawBCI
 
 /* ---------- State ---------- */
 let allMeals = [];           // full list from the sheet
-let weekMeals = [];          // ids selected for the week (persisted in localStorage)
+let weekMeals = [];          // ids selected for the week (persisted in Google Sheet)
 let activeFilter = 'all';
 let searchQuery = '';
-
-const STORAGE_KEY = 'mealplanner_week';
 
 /* ---------- DOM refs ---------- */
 const $ = (sel) => document.querySelector(sel);
@@ -36,13 +34,12 @@ const toastEl          = $('#toast');
    INIT
    ======================================================== */
 document.addEventListener('DOMContentLoaded', () => {
-  loadWeekFromStorage();
   bindTabs();
   bindFilters();
   bindSearch();
   bindAddForm();
   bindWeekActions();
-  fetchMeals();
+  fetchMeals(); // also loads weekPlan from sheet
 });
 
 /* ========================================================
@@ -78,6 +75,7 @@ async function fetchMeals() {
     const res = await fetch(WEB_APP_URL);
     const data = await res.json();
     allMeals = data.meals || [];
+    weekMeals = data.weekPlan || [];
   } catch (err) {
     console.error('Failed to load meals:', err);
     allMeals = [];
@@ -131,13 +129,17 @@ function createBankCard(meal) {
     <p class="card-ingredients">${escapeHTML(meal.ingredients)}</p>
     <div class="card-footer">
       ${linkHTML}
-      <button class="btn-select ${isAdded ? 'added' : ''}" data-id="${meal.id}">
-        ${isAdded ? 'Added' : '+ Add'}
-      </button>
+      <div class="card-actions">
+        <button class="btn-select ${isAdded ? 'added' : ''}" data-id="${meal.id}">
+          ${isAdded ? 'Added' : '+ Add'}
+        </button>
+        <button class="btn-delete" data-id="${meal.id}" title="Delete meal">✕</button>
+      </div>
     </div>
   `;
 
   card.querySelector('.btn-select').addEventListener('click', () => toggleWeekMeal(meal.id));
+  card.querySelector('.btn-delete').addEventListener('click', () => deleteMeal(meal));
   return card;
 }
 
@@ -201,20 +203,50 @@ function toggleWeekMeal(id) {
   } else {
     weekMeals.push(id);
   }
-  saveWeekToStorage();
+  saveWeekToSheet();
   renderBank();   // update "Added" state
   grocerySectionEl.classList.add('hidden'); // hide stale list
 }
 
-function loadWeekFromStorage() {
+async function deleteMeal(meal) {
+  if (!confirm(`Delete "${meal.name}" from the meal bank?`)) return;
+
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    weekMeals = raw ? JSON.parse(raw) : [];
-  } catch { weekMeals = []; }
+    const res = await fetch(WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'deleteMeal', id: meal.id }),
+    });
+    const data = await res.json();
+
+    if (data.status === 'ok') {
+      // Remove from week if selected
+      const idx = weekMeals.indexOf(meal.id);
+      if (idx > -1) {
+        weekMeals.splice(idx, 1);
+        saveWeekToSheet();
+      }
+      toast('Meal deleted');
+      await fetchMeals();
+    } else {
+      toast(data.message || 'Failed to delete');
+    }
+  } catch (err) {
+    console.error(err);
+    toast('Network error. Try again.');
+  }
 }
 
-function saveWeekToStorage() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(weekMeals));
+async function saveWeekToSheet() {
+  try {
+    await fetch(WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveWeek', weekPlan: weekMeals }),
+    });
+  } catch (err) {
+    console.error('Failed to save week plan:', err);
+  }
 }
 
 /* ========================================================
@@ -224,7 +256,7 @@ function bindWeekActions() {
   btnGenerate.addEventListener('click', generateGroceryList);
   btnClearWeek.addEventListener('click', () => {
     weekMeals = [];
-    saveWeekToStorage();
+    saveWeekToSheet();
     renderWeek();
     renderBank();
     toast('Week cleared');

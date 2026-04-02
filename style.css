@@ -253,6 +253,68 @@ main { padding: 1rem; max-width: 640px; margin: 0 auto; }
   border: 1px solid var(--clr-danger);
 }
 
+/* ===== EXTRA ITEMS ===== */
+.extras-section { margin-top: 1.5rem; }
+.extras-section h2 {
+  font-size: 1.1rem;
+  margin-bottom: .5rem;
+  color: var(--clr-primary);
+}
+.extras-input-row {
+  display: flex;
+  gap: .4rem;
+  margin-bottom: .5rem;
+}
+.extras-input-row input {
+  flex: 1;
+  padding: .5rem .75rem;
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius);
+  font: inherit;
+  font-size: .9rem;
+  background: var(--clr-surface);
+}
+.extras-input-row input:focus { outline: 2px solid var(--clr-primary); outline-offset: -1px; }
+.btn-add-extra {
+  border: none;
+  border-radius: var(--radius);
+  background: var(--clr-primary);
+  color: #fff;
+  font: inherit;
+  font-size: .85rem;
+  font-weight: 600;
+  padding: .5rem .85rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.extra-items-list {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .35rem;
+}
+.extra-items-list li {
+  display: inline-flex;
+  align-items: center;
+  gap: .3rem;
+  background: var(--clr-accent-light);
+  color: var(--clr-text);
+  font-size: .82rem;
+  padding: .25rem .55rem .25rem .7rem;
+  border-radius: 999px;
+}
+.btn-remove-extra {
+  border: none;
+  background: none;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--clr-muted);
+  padding: 0 .1rem;
+}
+.btn-remove-extra:hover { color: var(--clr-danger); }
+
 /* ===== GROCERY LIST ===== */
 #grocery-section { margin-top: 1.5rem; }
 #grocery-section h2 {

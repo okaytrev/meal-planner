@@ -8,6 +8,7 @@ const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwVaqs8KNz_GVfawBCI
 /* ---------- State ---------- */
 let allMeals = [];           // full list from the sheet
 let weekMeals = [];          // ids selected for the week (persisted in Google Sheet)
+let extraItems = JSON.parse(localStorage.getItem('extraItems') || '[]');
 let activeFilter = 'all';
 let searchQuery = '';
 
@@ -29,6 +30,9 @@ const searchInput      = $('#search-input');
 const addForm          = $('#add-form');
 const formStatus       = $('#form-status');
 const toastEl          = $('#toast');
+const extraInput       = $('#extra-item-input');
+const btnAddExtra      = $('#btn-add-extra');
+const extraListEl      = $('#extra-items-list');
 
 /* ========================================================
    INIT
@@ -39,6 +43,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bindSearch();
   bindAddForm();
   bindWeekActions();
+  bindExtras();
   fetchMeals(); // also loads weekPlan from sheet
 });
 
@@ -250,14 +255,59 @@ async function saveWeekToSheet() {
 }
 
 /* ========================================================
+   EXTRA GROCERY ITEMS
+   ======================================================== */
+function bindExtras() {
+  btnAddExtra.addEventListener('click', addExtraItem);
+  extraInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addExtraItem(); }
+  });
+  renderExtras();
+}
+
+function addExtraItem() {
+  const val = extraInput.value.trim();
+  if (!val) return;
+  extraItems.push(val);
+  saveExtras();
+  extraInput.value = '';
+  renderExtras();
+  grocerySectionEl.classList.add('hidden'); // hide stale list
+}
+
+function removeExtraItem(index) {
+  extraItems.splice(index, 1);
+  saveExtras();
+  renderExtras();
+  grocerySectionEl.classList.add('hidden');
+}
+
+function saveExtras() {
+  localStorage.setItem('extraItems', JSON.stringify(extraItems));
+}
+
+function renderExtras() {
+  extraListEl.innerHTML = '';
+  extraItems.forEach((item, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span>${escapeHTML(item)}</span><button class="btn-remove-extra" title="Remove">&times;</button>`;
+    li.querySelector('button').addEventListener('click', () => removeExtraItem(i));
+    extraListEl.appendChild(li);
+  });
+}
+
+/* ========================================================
    GROCERY LIST GENERATOR
    ======================================================== */
 function bindWeekActions() {
   btnGenerate.addEventListener('click', generateGroceryList);
   btnClearWeek.addEventListener('click', () => {
     weekMeals = [];
+    extraItems = [];
+    saveExtras();
     saveWeekToSheet();
     renderWeek();
+    renderExtras();
     renderBank();
     toast('Week cleared');
   });
@@ -275,6 +325,11 @@ function generateGroceryList() {
       const key = trimmed.toLowerCase();
       if (!map.has(key)) map.set(key, trimmed);
     });
+  });
+
+  extraItems.forEach(item => {
+    const key = item.toLowerCase();
+    if (!map.has(key)) map.set(key, item);
   });
 
   const items = [...map.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));

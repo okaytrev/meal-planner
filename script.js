@@ -8,7 +8,7 @@ const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwVaqs8KNz_GVfawBCI
 /* ---------- State ---------- */
 let allMeals = [];           // full list from the sheet
 let weekMeals = [];          // ids selected for the week (persisted in Google Sheet)
-let extraItems = JSON.parse(localStorage.getItem('extraItems') || '[]');
+let extraItems = [];
 let activeFilter = 'all';
 let searchQuery = '';
 
@@ -81,6 +81,7 @@ async function fetchMeals() {
     const data = await res.json();
     allMeals = data.meals || [];
     weekMeals = data.weekPlan || [];
+    extraItems = data.extraItems || [];
   } catch (err) {
     console.error('Failed to load meals:', err);
     allMeals = [];
@@ -88,6 +89,7 @@ async function fetchMeals() {
 
   bankLoaderEl.classList.add('hidden');
   renderBank();
+  renderExtras();
 }
 
 /* ========================================================
@@ -282,8 +284,16 @@ function removeExtraItem(index) {
   grocerySectionEl.classList.add('hidden');
 }
 
-function saveExtras() {
-  localStorage.setItem('extraItems', JSON.stringify(extraItems));
+async function saveExtras() {
+  try {
+    await fetch(WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveExtraItems', items: extraItems }),
+    });
+  } catch (err) {
+    console.error('Failed to save extra items:', err);
+  }
 }
 
 function renderExtras() {
@@ -316,7 +326,7 @@ function bindWeekActions() {
 
 function generateGroceryList() {
   const selected = allMeals.filter(m => weekMeals.includes(m.id));
-  const map = new Map(); // lowercase ingredient -> display name
+  const map = new Map();
 
   selected.forEach(meal => {
     meal.ingredients.split(',').forEach(raw => {
@@ -332,13 +342,91 @@ function generateGroceryList() {
     if (!map.has(key)) map.set(key, item);
   });
 
-  const items = [...map.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  const sorted = [...map.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
+  const groups = { Produce: [], Meat: [], 'Dry Goods': [], Misc: [] };
+  sorted.forEach(item => { groups[categorizeIngredient(item)].push(item); });
+
+  let draggedLi = null;
+
+  function makeItem(item, groupEl, ul) {
+    const li = document.createElement('li');
+
+    const handle = document.createElement('span');
+    handle.className = 'drag-handle';
+    handle.setAttribute('aria-hidden', 'true');
+    handle.textContent = '⠿';
+
+    const span = document.createElement('span');
+    span.className = 'grocery-item-text';
+    span.contentEditable = 'true';
+    span.textContent = item;
+    span.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+
+    const btnRemove = document.createElement('button');
+    btnRemove.className = 'btn-remove-grocery';
+    btnRemove.title = 'Remove item';
+    btnRemove.textContent = '×';
+    btnRemove.addEventListener('click', () => {
+      li.remove();
+      if (ul.children.length === 0) groupEl.classList.add('empty');
+    });
+
+    handle.addEventListener('mousedown', () => { li.draggable = true; });
+    li.addEventListener('dragstart', e => {
+      draggedLi = li;
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(() => li.classList.add('dragging'), 0);
+    });
+    li.addEventListener('dragend', () => {
+      li.draggable = false;
+      li.classList.remove('dragging');
+      draggedLi = null;
+      groceryListEl.querySelectorAll('.grocery-group').forEach(g => g.classList.remove('drag-over'));
+    });
+
+    li.appendChild(handle);
+    li.appendChild(span);
+    li.appendChild(btnRemove);
+    return li;
+  }
 
   groceryListEl.innerHTML = '';
-  items.forEach(item => {
-    const li = document.createElement('li');
-    li.textContent = item;
-    groceryListEl.appendChild(li);
+
+  Object.entries(groups).forEach(([groupName, items]) => {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'grocery-group' + (items.length === 0 ? ' empty' : '');
+
+    const title = document.createElement('h3');
+    title.className = 'grocery-group-title';
+    title.textContent = groupName;
+    groupEl.appendChild(title);
+
+    const ul = document.createElement('ul');
+    items.forEach(item => ul.appendChild(makeItem(item, groupEl, ul)));
+
+    groupEl.addEventListener('dragover', e => {
+      if (!draggedLi) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      groupEl.classList.add('drag-over');
+    });
+    groupEl.addEventListener('dragleave', e => {
+      if (!groupEl.contains(e.relatedTarget)) groupEl.classList.remove('drag-over');
+    });
+    groupEl.addEventListener('drop', e => {
+      e.preventDefault();
+      groupEl.classList.remove('drag-over');
+      if (!draggedLi || ul.contains(draggedLi)) return;
+      const srcGroup = draggedLi.closest('.grocery-group');
+      const srcUl = srcGroup.querySelector('ul');
+      ul.appendChild(draggedLi);
+      groupEl.classList.remove('empty');
+      if (srcUl.children.length === 0) srcGroup.classList.add('empty');
+    });
+
+    groupEl.appendChild(ul);
+    groceryListEl.appendChild(groupEl);
   });
 
   grocerySectionEl.classList.remove('hidden');
@@ -346,8 +434,17 @@ function generateGroceryList() {
 }
 
 async function copyGroceryList() {
-  const items = [...groceryListEl.querySelectorAll('li')].map(li => `- ${li.textContent}`);
-  const text = items.join('\n');
+  const lines = [];
+  groceryListEl.querySelectorAll('.grocery-group').forEach(group => {
+    const title = group.querySelector('.grocery-group-title').textContent;
+    const items = [...group.querySelectorAll('.grocery-item-text')].map(s => `- ${s.textContent.trim()}`);
+    if (items.length) {
+      lines.push(title + ':');
+      lines.push(...items);
+      lines.push('');
+    }
+  });
+  const text = lines.join('\n').trim();
 
   try {
     await navigator.clipboard.writeText(text);
@@ -435,6 +532,17 @@ function showFormStatus(msg, type) {
 /* ========================================================
    HELPERS
    ======================================================== */
+function categorizeIngredient(name) {
+  const lower = name.toLowerCase();
+  const PRODUCE = ['apple','banana','lemon','lime','orange','berry','berries','lettuce','spinach','kale','arugula','cabbage','broccoli','cauliflower','carrot','celery','cucumber','zucchini','squash','bell pepper','jalapeño','pepper','tomato','onion','garlic','ginger','mushroom','potato','sweet potato','avocado','guacamole','corn','pea','green bean','snap pea','edamame','asparagus','beet','radish','cilantro','parsley','basil','mint','rosemary','thyme','sage','dill','scallion','leek','shallot','fennel','eggplant','mango','pineapple','grape','peach','plum','pear','melon','watermelon','cantaloupe','brussels','brussel','sprout','artichoke','bok choy','chard','collard','endive','watercress','turnip','parsnip','yam','okra','tomatillo','plantain','jicama','kohlrabi','rutabaga','fruit','vegetable','veggie','produce','herb','fresh'];
+  const MEAT = ['chicken','beef','pork','lamb','turkey','salmon','tuna','shrimp','fish','steak','ground beef','ground turkey','sausage','bacon','ham','prosciutto','pancetta','crab','lobster','scallop','tilapia','cod','halibut','duck','bison','meat','seafood'];
+  const DRY_GOODS = ['rice','pasta','flour','oat','bread','cereal','cracker','chip','noodle','quinoa','lentil','bean','chickpea','barley','bulgur','couscous','panko','breadcrumb','tortilla','wrap','pita','grain','canned','sauce','stock','broth','olive oil','oil','vinegar','soy sauce','tamari','ketchup','mustard','mayo','mayonnaise','salt','sugar','honey','syrup','jam','jelly','peanut butter','almond butter','nut','almond','walnut','pecan','cashew','pistachio','seed','coconut','chocolate','cocoa','coffee','tea','powder','spice','seasoning','cumin','paprika','oregano','cinnamon','turmeric','curry','chili flake','pepper flake','baking soda','baking powder','yeast','bouillon'];
+  if (PRODUCE.some(k => lower.includes(k))) return 'Produce';
+  if (MEAT.some(k => lower.includes(k))) return 'Meat';
+  if (DRY_GOODS.some(k => lower.includes(k))) return 'Dry Goods';
+  return 'Misc';
+}
+
 function parseTags(tagStr) {
   return tagStr
     .split(',')

@@ -325,28 +325,86 @@ main { padding: 1rem; max-width: 640px; margin: 0 auto; }
   color: var(--clr-primary);
 }
 #grocery-list {
-  list-style: none;
-  padding: 0;
   background: var(--clr-surface);
   border: 1px solid var(--clr-border);
   border-radius: var(--radius);
+  overflow: hidden;
 }
-#grocery-list li {
-  padding: .55rem .85rem;
+.grocery-group-title {
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--clr-muted);
+  padding: .5rem .85rem .3rem;
+  background: var(--clr-bg);
+  border-bottom: 1px solid var(--clr-border);
+}
+.grocery-group + .grocery-group .grocery-group-title {
+  border-top: 1px solid var(--clr-border);
+}
+.grocery-group ul {
+  list-style: none;
+  padding: 0;
+}
+.grocery-group li {
+  padding: .5rem .65rem .5rem .5rem;
   font-size: .88rem;
   border-bottom: 1px solid var(--clr-border);
   display: flex;
   align-items: center;
-  gap: .5rem;
+  gap: .4rem;
 }
-#grocery-list li::before {
-  content: '';
-  width: 6px; height: 6px;
-  border-radius: 50%;
-  background: var(--clr-primary);
+.grocery-group:last-child li:last-child { border-bottom: none; }
+.grocery-group li.dragging { opacity: 0.3; }
+.grocery-group.drag-over { background: var(--clr-primary-light); }
+.grocery-group.drag-over ul { min-height: 2.5rem; }
+.grocery-group.empty ul {
+  min-height: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.grocery-group.empty ul::after {
+  content: 'drag items here';
+  color: var(--clr-muted);
+  font-size: .78rem;
+  font-style: italic;
+}
+.drag-handle {
+  color: var(--clr-muted);
+  font-size: .95rem;
+  cursor: grab;
   flex-shrink: 0;
+  user-select: none;
+  opacity: 0.45;
+  line-height: 1;
 }
-#grocery-list li:last-child { border-bottom: none; }
+.drag-handle:hover { opacity: 0.9; }
+.grocery-item-text {
+  flex: 1;
+  outline: none;
+  border-radius: 3px;
+  min-width: 0;
+}
+.grocery-item-text:focus {
+  background: var(--clr-primary-light);
+  padding: .1rem .35rem;
+  margin: -.1rem -.35rem;
+}
+.btn-remove-grocery {
+  border: none;
+  background: none;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--clr-muted);
+  padding: 0 .1rem;
+  flex-shrink: 0;
+  margin-left: auto;
+  opacity: 0.5;
+}
+.btn-remove-grocery:hover { color: var(--clr-danger); opacity: 1; }
 
 /* ===== ADD FORM ===== */
 .add-form { display: flex; flex-direction: column; gap: .6rem; }

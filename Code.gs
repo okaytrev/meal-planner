@@ -16,6 +16,7 @@
 
 const SHEET_NAME = 'Meals';
 const WEEK_SHEET_NAME = 'WeekPlan';
+const EXTRA_SHEET_NAME = 'ExtraItems';
 
 function getSheet() {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
@@ -23,6 +24,10 @@ function getSheet() {
 
 function getWeekSheet() {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(WEEK_SHEET_NAME);
+}
+
+function getExtraSheet() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EXTRA_SHEET_NAME);
 }
 
 /* ---------- READ ---------- */
@@ -50,8 +55,17 @@ function doGet() {
     .filter(row => row[0])
     .map(row => Number(row[0]));
 
+  // Extra items
+  const extraSheet = getExtraSheet();
+  let extraItems = [];
+  if (extraSheet) {
+    const extraData = extraSheet.getDataRange().getValues();
+    extraData.shift(); // remove header
+    extraItems = extraData.filter(row => row[0]).map(row => row[0].toString().trim());
+  }
+
   return ContentService
-    .createTextOutput(JSON.stringify({ status: 'ok', meals, weekPlan }))
+    .createTextOutput(JSON.stringify({ status: 'ok', meals, weekPlan, extraItems }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -63,6 +77,10 @@ function doPost(e) {
 
     if (action === 'saveWeek') {
       return saveWeekPlan(body.weekPlan || []);
+    }
+
+    if (action === 'saveExtraItems') {
+      return saveExtraItemsList(body.items || []);
     }
 
     if (action === 'deleteMeal') {
@@ -104,6 +122,23 @@ function deleteMeal(id) {
 
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', message: 'Meal deleted.' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function saveExtraItemsList(items) {
+  const sheet = getExtraSheet();
+  if (!sheet) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: 'ExtraItems sheet not found. Create a tab named "ExtraItems" with header "Item" in A1.' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  const lastRow = sheet.getLastRow();
+  if (lastRow > 1) {
+    sheet.getRange(2, 1, lastRow - 1, 1).clearContent();
+  }
+  items.forEach(item => sheet.appendRow([item]));
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'ok', message: 'Extra items saved.' }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 

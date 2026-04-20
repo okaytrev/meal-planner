@@ -17,6 +17,7 @@
 const SHEET_NAME = 'Meals';
 const WEEK_SHEET_NAME = 'WeekPlan';
 const EXTRA_SHEET_NAME = 'ExtraItems';
+const GROCERY_SHEET_NAME = 'GroceryList';
 
 function getSheet() {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
@@ -28,6 +29,10 @@ function getWeekSheet() {
 
 function getExtraSheet() {
   return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(EXTRA_SHEET_NAME);
+}
+
+function getGroceryListSheet() {
+  return SpreadsheetApp.getActiveSpreadsheet().getSheetByName(GROCERY_SHEET_NAME);
 }
 
 /* ---------- READ ---------- */
@@ -64,8 +69,18 @@ function doGet() {
     extraItems = extraData.filter(row => row[0]).map(row => row[0].toString().trim());
   }
 
+  // Grocery list — stored as a single JSON string in A2
+  const groceryListSheet = getGroceryListSheet();
+  let groceryList = [];
+  if (groceryListSheet) {
+    const val = groceryListSheet.getRange('A2').getValue().toString().trim();
+    if (val) {
+      try { groceryList = JSON.parse(val); } catch(e) { groceryList = []; }
+    }
+  }
+
   return ContentService
-    .createTextOutput(JSON.stringify({ status: 'ok', meals, weekPlan, extraItems }))
+    .createTextOutput(JSON.stringify({ status: 'ok', meals, weekPlan, extraItems, groceryList }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
@@ -81,6 +96,10 @@ function doPost(e) {
 
     if (action === 'saveExtraItems') {
       return saveExtraItemsList(body.items || []);
+    }
+
+    if (action === 'saveGroceryList') {
+      return saveGroceryListInSheet(body.items || []);
     }
 
     if (action === 'deleteMeal') {
@@ -139,6 +158,19 @@ function saveExtraItemsList(items) {
   items.forEach(item => sheet.appendRow([item]));
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', message: 'Extra items saved.' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function saveGroceryListInSheet(items) {
+  const sheet = getGroceryListSheet();
+  if (!sheet) {
+    return ContentService
+      .createTextOutput(JSON.stringify({ status: 'error', message: 'GroceryList sheet not found. Create a tab named "GroceryList" with "Data" in cell A1.' }))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+  sheet.getRange('A2').setValue(JSON.stringify(items));
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'ok', message: 'Grocery list saved.' }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 

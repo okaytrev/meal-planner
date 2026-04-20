@@ -2,13 +2,13 @@
    Meal Planner — Frontend Logic
    ======================================================== */
 
-// TODO: Replace with your deployed Google Apps Script Web App URL
 const WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbwVaqs8KNz_GVfawBCIJn50BvXuEunV-aHhbtVOACgo41l9yLdRfzPmJKSu-tw16pg3/exec';
 
 /* ---------- State ---------- */
-let allMeals = [];           // full list from the sheet
-let weekMeals = [];          // ids selected for the week (persisted in Google Sheet)
+let allMeals = [];
+let weekMeals = [];
 let extraItems = [];
+let groceryList = [];
 let activeFilter = 'all';
 let searchQuery = '';
 
@@ -44,7 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
   bindAddForm();
   bindWeekActions();
   bindExtras();
-  fetchMeals(); // also loads weekPlan from sheet
+  fetchMeals();
 });
 
 /* ========================================================
@@ -62,7 +62,6 @@ function bindTabs() {
       panel.classList.remove('hidden');
       panel.classList.add('active');
 
-      // Re-render the week panel when switching to it
       if (btn.dataset.tab === 'week') renderWeek();
     });
   });
@@ -82,6 +81,7 @@ async function fetchMeals() {
     allMeals = data.meals || [];
     weekMeals = data.weekPlan || [];
     extraItems = data.extraItems || [];
+    groceryList = data.groceryList || [];
   } catch (err) {
     console.error('Failed to load meals:', err);
     allMeals = [];
@@ -90,6 +90,11 @@ async function fetchMeals() {
   bankLoaderEl.classList.add('hidden');
   renderBank();
   renderExtras();
+
+  if (groceryList.length > 0) {
+    renderGroceryItems(groceryList);
+    grocerySectionEl.classList.remove('hidden');
+  }
 }
 
 /* ========================================================
@@ -161,7 +166,7 @@ function renderWeek() {
     weekEmptyEl.classList.remove('hidden');
     btnGenerate.classList.add('hidden');
     btnClearWeek.classList.add('hidden');
-    grocerySectionEl.classList.add('hidden');
+    if (groceryList.length === 0) grocerySectionEl.classList.add('hidden');
     return;
   }
 
@@ -211,8 +216,8 @@ function toggleWeekMeal(id) {
     weekMeals.push(id);
   }
   saveWeekToSheet();
-  renderBank();   // update "Added" state
-  grocerySectionEl.classList.add('hidden'); // hide stale list
+  renderBank();
+  grocerySectionEl.classList.add('hidden');
 }
 
 async function deleteMeal(meal) {
@@ -227,7 +232,6 @@ async function deleteMeal(meal) {
     const data = await res.json();
 
     if (data.status === 'ok') {
-      // Remove from week if selected
       const idx = weekMeals.indexOf(meal.id);
       if (idx > -1) {
         weekMeals.splice(idx, 1);
@@ -274,7 +278,7 @@ function addExtraItem() {
   saveExtras();
   extraInput.value = '';
   renderExtras();
-  grocerySectionEl.classList.add('hidden'); // hide stale list
+  grocerySectionEl.classList.add('hidden');
 }
 
 function removeExtraItem(index) {
@@ -314,24 +318,36 @@ function bindWeekActions() {
   btnClearWeek.addEventListener('click', () => {
     weekMeals = [];
     extraItems = [];
+    groceryList = [];
     saveExtras();
     saveWeekToSheet();
+    saveGroceryListToSheet();
     renderWeek();
     renderExtras();
     renderBank();
+    grocerySectionEl.classList.add('hidden');
     toast('Week cleared');
   });
   btnCopy.addEventListener('click', copyGroceryList);
 }
 
 function generateGroceryList() {
+  const items = computeGroceryItems();
+  groceryList = items;
+  renderGroceryItems(items);
+  saveGroceryListToSheet();
+  grocerySectionEl.classList.remove('hidden');
+  grocerySectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function computeGroceryItems() {
   const selected = allMeals.filter(m => weekMeals.includes(m.id));
   const map = new Map();
 
   selected.forEach(meal => {
     meal.ingredients.split(',').forEach(raw => {
       const trimmed = raw.trim();
-      if (!trimmed) return;
+      if (!trimmed || isSpice(trimmed)) return;
       const key = trimmed.toLowerCase();
       if (!map.has(key)) map.set(key, trimmed);
     });
@@ -343,11 +359,19 @@ function generateGroceryList() {
   });
 
   const sorted = [...map.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+  return sorted.map(item => ({ group: categorizeIngredient(item), item }));
+}
 
-  const groups = { Produce: [], Meat: [], 'Dry Goods': [], Misc: [] };
-  sorted.forEach(item => { groups[categorizeIngredient(item)].push(item); });
-
+function renderGroceryItems(items) {
   let draggedLi = null;
+
+  const GROUP_ORDER = ['Produce', 'Meat', 'Dry Goods', 'Misc'];
+  const groups = {};
+  GROUP_ORDER.forEach(g => { groups[g] = []; });
+  items.forEach(({ group, item }) => {
+    const g = GROUP_ORDER.includes(group) ? group : 'Misc';
+    groups[g].push(item);
+  });
 
   function makeItem(item, groupEl, ul) {
     const li = document.createElement('li');
@@ -362,6 +386,7 @@ function generateGroceryList() {
     span.contentEditable = 'true';
     span.textContent = item;
     span.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
+    span.addEventListener('blur', () => debouncedSaveGroceryList());
 
     const btnRemove = document.createElement('button');
     btnRemove.className = 'btn-remove-grocery';
@@ -370,6 +395,7 @@ function generateGroceryList() {
     btnRemove.addEventListener('click', () => {
       li.remove();
       if (ul.children.length === 0) groupEl.classList.add('empty');
+      debouncedSaveGroceryList();
     });
 
     handle.addEventListener('mousedown', () => { li.draggable = true; });
@@ -393,9 +419,10 @@ function generateGroceryList() {
 
   groceryListEl.innerHTML = '';
 
-  Object.entries(groups).forEach(([groupName, items]) => {
+  GROUP_ORDER.forEach(groupName => {
+    const groupItems = groups[groupName];
     const groupEl = document.createElement('div');
-    groupEl.className = 'grocery-group' + (items.length === 0 ? ' empty' : '');
+    groupEl.className = 'grocery-group' + (groupItems.length === 0 ? ' empty' : '');
 
     const title = document.createElement('h3');
     title.className = 'grocery-group-title';
@@ -403,7 +430,7 @@ function generateGroceryList() {
     groupEl.appendChild(title);
 
     const ul = document.createElement('ul');
-    items.forEach(item => ul.appendChild(makeItem(item, groupEl, ul)));
+    groupItems.forEach(item => ul.appendChild(makeItem(item, groupEl, ul)));
 
     groupEl.addEventListener('dragover', e => {
       if (!draggedLi) return;
@@ -423,14 +450,44 @@ function generateGroceryList() {
       ul.appendChild(draggedLi);
       groupEl.classList.remove('empty');
       if (srcUl.children.length === 0) srcGroup.classList.add('empty');
+      debouncedSaveGroceryList();
     });
 
     groupEl.appendChild(ul);
     groceryListEl.appendChild(groupEl);
   });
+}
 
-  grocerySectionEl.classList.remove('hidden');
-  grocerySectionEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+function readGroceryListFromDOM() {
+  const items = [];
+  groceryListEl.querySelectorAll('.grocery-group').forEach(group => {
+    const groupName = group.querySelector('.grocery-group-title').textContent;
+    group.querySelectorAll('.grocery-item-text').forEach(span => {
+      const text = span.textContent.trim();
+      if (text) items.push({ group: groupName, item: text });
+    });
+  });
+  return items;
+}
+
+let _grocerySaveTimer = null;
+function debouncedSaveGroceryList() {
+  clearTimeout(_grocerySaveTimer);
+  _grocerySaveTimer = setTimeout(() => saveGroceryListToSheet(), 500);
+}
+
+async function saveGroceryListToSheet() {
+  const items = readGroceryListFromDOM();
+  groceryList = items;
+  try {
+    await fetch(WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'saveGroceryList', items }),
+    });
+  } catch (err) {
+    console.error('Failed to save grocery list:', err);
+  }
 }
 
 async function copyGroceryList() {
@@ -446,19 +503,27 @@ async function copyGroceryList() {
   });
   const text = lines.join('\n').trim();
 
-  try {
-    await navigator.clipboard.writeText(text);
-    toast('Copied to clipboard!');
-  } catch {
-    // Fallback
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand('copy');
-    ta.remove();
-    toast('Copied to clipboard!');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast('Copied to clipboard!');
+      return;
+    } catch {
+      // fall through to textarea fallback
+    }
   }
+
+  // iOS-compatible fallback
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+  ta.setAttribute('readonly', '');
+  document.body.appendChild(ta);
+  ta.focus();
+  ta.setSelectionRange(0, text.length);
+  document.execCommand('copy');
+  document.body.removeChild(ta);
+  toast('Copied to clipboard!');
 }
 
 /* ========================================================
@@ -501,7 +566,7 @@ function bindAddForm() {
     try {
       const res = await fetch(WEB_APP_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain' }, // plain to avoid CORS preflight
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ name, ingredients, link, tags }),
       });
       const data = await res.json();
@@ -532,6 +597,21 @@ function showFormStatus(msg, type) {
 /* ========================================================
    HELPERS
    ======================================================== */
+function isSpice(name) {
+  const lower = name.toLowerCase().trim();
+  if (lower.includes('butter') || lower.includes('saltine') || lower.includes('salt pork')) return false;
+  const SPICE_KEYWORDS = [
+    'salt','cumin','paprika','oregano','cinnamon','turmeric','curry powder',
+    'cayenne','chili powder','chili flake','chili flakes','garlic powder','onion powder',
+    'cardamom','clove','nutmeg','allspice','caraway','saffron','bay leaf',
+    'mustard powder','dried thyme','dried rosemary','dried sage','dried dill',
+    'dried basil','dried parsley','dried oregano','dried mint','italian seasoning',
+    'taco seasoning','garam masala','spice blend','seasoning blend','black pepper',
+    'white pepper','ground pepper','peppercorn','red pepper flake','crushed red pepper',
+  ];
+  return SPICE_KEYWORDS.some(k => lower.includes(k));
+}
+
 function categorizeIngredient(name) {
   const lower = name.toLowerCase();
   const PRODUCE = ['apple','banana','lemon','lime','orange','berry','berries','lettuce','spinach','kale','arugula','cabbage','broccoli','cauliflower','carrot','celery','cucumber','zucchini','squash','bell pepper','jalapeño','pepper','tomato','onion','garlic','ginger','mushroom','potato','sweet potato','avocado','guacamole','corn','pea','green bean','snap pea','edamame','asparagus','beet','radish','cilantro','parsley','basil','mint','rosemary','thyme','sage','dill','scallion','leek','shallot','fennel','eggplant','mango','pineapple','grape','peach','plum','pear','melon','watermelon','cantaloupe','brussels','brussel','sprout','artichoke','bok choy','chard','collard','endive','watercress','turnip','parsnip','yam','okra','tomatillo','plantain','jicama','kohlrabi','rutabaga','fruit','vegetable','veggie','produce','herb','fresh'];

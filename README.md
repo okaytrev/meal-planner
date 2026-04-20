@@ -36,6 +36,10 @@ A simple, mobile-first web app for weekly meal planning and grocery list generat
    | A: Item |
    |---|
 
+   **GroceryList** tab — header in row 1:
+   | A: Data |
+   |---|
+
    > Ingredients should be comma-separated (e.g. `chicken breast, olive oil, garlic, lemon`).  
    > Tags are space-separated: `GF`, `DF`, or `GF DF`.
 

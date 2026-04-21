@@ -11,7 +11,7 @@ A mobile-first weekly meal planner web app for managing GF/DF meals, selecting w
 **Frontend** (GitHub Pages): Static HTML/CSS/vanilla JS — single-page app with tab-based navigation (Meal Bank, This Week, Add Meal). No build step, no bundler, no framework.
 
 **Backend** (Google Apps Script): `Code.gs` is deployed as a Google Apps Script Web App. It reads/writes to a Google Sheet with two tabs:
-- "Meals" tab (columns: Meal Name, Ingredients, Recipe Link/Notes, Tags)
+- "Meals" tab (columns: Meal Name, Ingredients, Recipe Link/Notes, Tags, Rating, Last Made)
 - "WeekPlan" tab (column: Meal ID — row numbers from the Meals sheet)
 
 **Data flow**: `script.js` calls the Apps Script URL (`WEB_APP_URL`) via fetch. GET returns all meals + week plan. POST handles three actions: `addMeal` (default), `deleteMeal`, `saveWeek`. Content-Type is `text/plain` to avoid CORS preflight.
@@ -25,6 +25,6 @@ No build/lint/test commands — open `index.html` directly in a browser. To test
 ## Key Details
 
 - CSS uses custom properties defined in `:root` for theming (green primary, orange accent)
-- Dietary tags are limited to GF (Gluten-Free) and DF (Dairy-Free) — hardcoded in `parseTags()` and filter chips
+- Dietary tags are limited to GF (Gluten-Free), DF (Dairy-Free), V (Vegan), and VG (Vegetarian) — hardcoded in `parseTags()` and filter chips
 - Grocery list deduplication is case-insensitive; ingredients are comma-separated strings
 - `escapeHTML()` and `escapeAttr()` in `script.js` handle XSS prevention for user content

@@ -50,6 +50,8 @@ function doGet() {
       ingredients: row[1].toString().trim(),
       link: row[2].toString().trim(),
       tags: row[3].toString().trim(),
+      rating: row[4] ? Number(row[4]) : 0,
+      lastMade: row[5] ? row[5].toString().trim() : '',
     }));
 
   // Week plan
@@ -100,6 +102,14 @@ function doPost(e) {
 
     if (action === 'saveGroceryList') {
       return saveGroceryListInSheet(body.items || []);
+    }
+
+    if (action === 'rateMeal') {
+      return rateMeal(body.id, body.rating);
+    }
+
+    if (action === 'markMade') {
+      return markMade(body.id);
     }
 
     if (action === 'deleteMeal') {
@@ -171,6 +181,23 @@ function saveGroceryListInSheet(items) {
   sheet.getRange('A2').setValue(JSON.stringify(items));
   return ContentService
     .createTextOutput(JSON.stringify({ status: 'ok', message: 'Grocery list saved.' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function rateMeal(id, rating) {
+  const sheet = getSheet();
+  sheet.getRange(Number(id), 5).setValue(rating || 0);
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'ok' }))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+function markMade(id) {
+  const sheet = getSheet();
+  const date = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
+  sheet.getRange(Number(id), 6).setValue(date);
+  return ContentService
+    .createTextOutput(JSON.stringify({ status: 'ok', date }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 

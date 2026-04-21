@@ -139,6 +139,10 @@ function createBankCard(meal) {
       <div class="card-tags">${tagHTML}</div>
     </div>
     <p class="card-ingredients">${escapeHTML(meal.ingredients)}</p>
+    <div class="card-meta">
+      <div class="star-rating" data-meal-id="${meal.id}"></div>
+      <span class="last-made" data-meal-id="${meal.id}">${escapeHTML(relativeDate(meal.lastMade))}</span>
+    </div>
     <div class="card-footer">
       ${linkHTML}
       <div class="card-actions">
@@ -150,6 +154,7 @@ function createBankCard(meal) {
     </div>
   `;
 
+  buildStars(card.querySelector('.star-rating'), meal);
   card.querySelector('.btn-select').addEventListener('click', () => toggleWeekMeal(meal.id));
   card.querySelector('.btn-delete').addEventListener('click', () => deleteMeal(meal));
   return card;
@@ -192,12 +197,18 @@ function createWeekCard(meal) {
       <div class="card-tags">${tagHTML}</div>
     </div>
     <p class="card-ingredients">${escapeHTML(meal.ingredients)}</p>
+    <div class="card-meta">
+      <div class="star-rating" data-meal-id="${meal.id}"></div>
+      <span class="last-made" data-meal-id="${meal.id}">${escapeHTML(relativeDate(meal.lastMade))}</span>
+    </div>
     <div class="card-footer">
-      <span></span>
+      <button class="btn-made" data-id="${meal.id}">✓ Made it</button>
       <button class="btn-remove" data-id="${meal.id}">Remove</button>
     </div>
   `;
 
+  buildStars(card.querySelector('.star-rating'), meal);
+  card.querySelector('.btn-made').addEventListener('click', () => markMealMade(meal.id));
   card.querySelector('.btn-remove').addEventListener('click', () => {
     toggleWeekMeal(meal.id);
     renderWeek();
@@ -348,7 +359,7 @@ function computeGroceryItems() {
     meal.ingredients.split(',').forEach(raw => {
       const trimmed = raw.trim();
       if (!trimmed || isSpice(trimmed)) return;
-      const key = trimmed.toLowerCase();
+      const key = ingredientKey(trimmed);
       if (!map.has(key)) map.set(key, trimmed);
     });
   });
@@ -359,7 +370,7 @@ function computeGroceryItems() {
   });
 
   const sorted = [...map.values()].sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
-  return sorted.map(item => ({ group: categorizeIngredient(item), item }));
+  return sorted.map(item => ({ group: categorizeIngredient(item), item, qty: 1 }));
 }
 
 function renderGroceryItems(items) {
@@ -368,12 +379,12 @@ function renderGroceryItems(items) {
   const GROUP_ORDER = ['Produce', 'Meat', 'Dry Goods', 'Misc'];
   const groups = {};
   GROUP_ORDER.forEach(g => { groups[g] = []; });
-  items.forEach(({ group, item }) => {
+  items.forEach(({ group, item, qty }) => {
     const g = GROUP_ORDER.includes(group) ? group : 'Misc';
-    groups[g].push(item);
+    groups[g].push({ item, qty: qty || 1 });
   });
 
-  function makeItem(item, groupEl, ul) {
+  function makeItem(item, qty, groupEl, ul) {
     const li = document.createElement('li');
 
     const handle = document.createElement('span');
@@ -387,6 +398,36 @@ function renderGroceryItems(items) {
     span.textContent = item;
     span.addEventListener('keydown', e => { if (e.key === 'Enter') e.preventDefault(); });
     span.addEventListener('blur', () => debouncedSaveGroceryList());
+
+    const qtyControl = document.createElement('div');
+    qtyControl.className = 'qty-control';
+
+    const qtyUp = document.createElement('button');
+    qtyUp.className = 'qty-btn';
+    qtyUp.textContent = '▲';
+    qtyUp.setAttribute('aria-label', 'Increase quantity');
+
+    const qtyVal = document.createElement('span');
+    qtyVal.className = 'qty-value';
+    qtyVal.textContent = qty;
+
+    const qtyDown = document.createElement('button');
+    qtyDown.className = 'qty-btn';
+    qtyDown.textContent = '▼';
+    qtyDown.setAttribute('aria-label', 'Decrease quantity');
+
+    qtyUp.addEventListener('click', () => {
+      qtyVal.textContent = Number(qtyVal.textContent) + 1;
+      debouncedSaveGroceryList();
+    });
+    qtyDown.addEventListener('click', () => {
+      const n = Number(qtyVal.textContent);
+      if (n > 1) { qtyVal.textContent = n - 1; debouncedSaveGroceryList(); }
+    });
+
+    qtyControl.appendChild(qtyUp);
+    qtyControl.appendChild(qtyVal);
+    qtyControl.appendChild(qtyDown);
 
     const btnRemove = document.createElement('button');
     btnRemove.className = 'btn-remove-grocery';
@@ -413,6 +454,7 @@ function renderGroceryItems(items) {
 
     li.appendChild(handle);
     li.appendChild(span);
+    li.appendChild(qtyControl);
     li.appendChild(btnRemove);
     return li;
   }
@@ -430,7 +472,7 @@ function renderGroceryItems(items) {
     groupEl.appendChild(title);
 
     const ul = document.createElement('ul');
-    groupItems.forEach(item => ul.appendChild(makeItem(item, groupEl, ul)));
+    groupItems.forEach(({ item, qty }) => ul.appendChild(makeItem(item, qty || 1, groupEl, ul)));
 
     groupEl.addEventListener('dragover', e => {
       if (!draggedLi) return;
@@ -462,9 +504,10 @@ function readGroceryListFromDOM() {
   const items = [];
   groceryListEl.querySelectorAll('.grocery-group').forEach(group => {
     const groupName = group.querySelector('.grocery-group-title').textContent;
-    group.querySelectorAll('.grocery-item-text').forEach(span => {
-      const text = span.textContent.trim();
-      if (text) items.push({ group: groupName, item: text });
+    group.querySelectorAll('li').forEach(li => {
+      const text = li.querySelector('.grocery-item-text').textContent.trim();
+      const qty = Number(li.querySelector('.qty-value').textContent) || 1;
+      if (text) items.push({ group: groupName, item: text, qty });
     });
   });
   return items;
@@ -494,7 +537,11 @@ async function copyGroceryList() {
   const lines = [];
   groceryListEl.querySelectorAll('.grocery-group').forEach(group => {
     const title = group.querySelector('.grocery-group-title').textContent;
-    const items = [...group.querySelectorAll('.grocery-item-text')].map(s => `- ${s.textContent.trim()}`);
+    const items = [...group.querySelectorAll('li')].map(li => {
+      const text = li.querySelector('.grocery-item-text').textContent.trim();
+      const qty = Number(li.querySelector('.qty-value').textContent) || 1;
+      return qty > 1 ? `- ${qty}x ${text}` : `- ${text}`;
+    });
     if (items.length) {
       lines.push(title + ':');
       lines.push(...items);
@@ -597,6 +644,76 @@ function showFormStatus(msg, type) {
 /* ========================================================
    HELPERS
    ======================================================== */
+function buildStars(container, meal) {
+  for (let i = 1; i <= 5; i++) {
+    const btn = document.createElement('button');
+    btn.className = 'star' + (i <= meal.rating ? ' filled' : '');
+    btn.textContent = '★';
+    btn.setAttribute('aria-label', `Rate ${i} star${i > 1 ? 's' : ''}`);
+    btn.addEventListener('click', (e) => { e.stopPropagation(); rateMeal(meal, i); });
+    container.appendChild(btn);
+  }
+}
+
+async function rateMeal(meal, rating) {
+  const newRating = meal.rating === rating ? 0 : rating;
+  meal.rating = newRating;
+  document.querySelectorAll(`.star-rating[data-meal-id="${meal.id}"] .star`).forEach((star, i) => {
+    star.classList.toggle('filled', i + 1 <= newRating);
+  });
+  try {
+    await fetch(WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'rateMeal', id: meal.id, rating: newRating }),
+    });
+  } catch (err) {
+    console.error('Failed to save rating:', err);
+  }
+}
+
+async function markMealMade(id) {
+  try {
+    const res = await fetch(WEB_APP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action: 'markMade', id }),
+    });
+    const data = await res.json();
+    if (data.status === 'ok') {
+      const meal = allMeals.find(m => m.id === id);
+      if (meal) {
+        meal.lastMade = data.date;
+        document.querySelectorAll(`.last-made[data-meal-id="${id}"]`).forEach(el => {
+          el.textContent = relativeDate(meal.lastMade);
+        });
+      }
+      toast('Marked as made!');
+    }
+  } catch (err) {
+    toast('Network error. Try again.');
+  }
+}
+
+function relativeDate(dateStr) {
+  if (!dateStr) return 'Never made';
+  const days = Math.floor((Date.now() - new Date(dateStr)) / 86400000);
+  if (days === 0) return 'Made today';
+  if (days === 1) return 'Made yesterday';
+  if (days < 7) return `Made ${days} days ago`;
+  if (days < 14) return 'Made last week';
+  if (days < 30) return `Made ${Math.floor(days / 7)} weeks ago`;
+  if (days < 60) return 'Made last month';
+  return `Made ${Math.floor(days / 30)} months ago`;
+}
+
+function ingredientKey(str) {
+  // Strip leading quantity + unit so "2 lbs chicken" and "chicken" deduplicate
+  return str.toLowerCase()
+    .replace(/^[\d\s¼½¾⅓⅔\/.-]+(?:cups?|tbsps?|tsps?|oz|lbs?|pounds?|g|kg|ml|l|cloves?|pieces?|slices?|cans?|bunches?|pkg|packages?|heads?|handfuls?|dashes?|pinches?)\s+/i, '')
+    .trim() || str.toLowerCase();
+}
+
 function isSpice(name) {
   const lower = name.toLowerCase().trim();
   if (lower.includes('butter') || lower.includes('saltine') || lower.includes('salt pork')) return false;
@@ -627,7 +744,7 @@ function parseTags(tagStr) {
   return tagStr
     .split(',')
     .map(t => t.trim().toUpperCase())
-    .filter(t => ['GF', 'DF'].includes(t));
+    .filter(t => ['GF', 'DF', 'V', 'VG'].includes(t));
 }
 
 function escapeHTML(str) {

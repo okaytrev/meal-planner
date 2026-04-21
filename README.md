@@ -25,8 +25,8 @@ A simple, mobile-first web app for weekly meal planning and grocery list generat
 2. Create three tabs with these exact names and headers:
 
    **Meals** tab — headers in row 1:
-   | A: Meal Name | B: Ingredients | C: Recipe Link/Notes | D: Tags |
-   |---|---|---|---|
+   | A: Meal Name | B: Ingredients | C: Recipe Link/Notes | D: Tags | E: Rating | F: Last Made |
+   |---|---|---|---|---|---|
 
    **WeekPlan** tab — header in row 1:
    | A: Meal ID |
